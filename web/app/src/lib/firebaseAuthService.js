@@ -16,6 +16,18 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 
+const buildAuthConfigError = () => {
+  return Object.assign(new Error("Firebase authentication is not configured."), {
+    code: "auth/not-configured",
+  });
+};
+
+const ensureAuth = () => {
+  if (!auth) {
+    throw buildAuthConfigError();
+  }
+};
+
 /* ── helpers ─────────────────────────────────────────────── */
 const wrap = async (fn) => {
   try {
@@ -35,6 +47,7 @@ const wrap = async (fn) => {
  */
 export const signUpWithEmail = ({ email, password, displayName }) =>
   wrap(async () => {
+    ensureAuth();
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     if (displayName) {
       await updateProfile(cred.user, { displayName });
@@ -44,31 +57,53 @@ export const signUpWithEmail = ({ email, password, displayName }) =>
   });
 
 export const signInWithEmail = ({ email, password }) =>
-  wrap(() => signInWithEmailAndPassword(auth, email, password).then((c) => c.user));
+  wrap(() => {
+    ensureAuth();
+    return signInWithEmailAndPassword(auth, email, password).then((c) => c.user);
+  });
 
 /* ── Google OAuth ────────────────────────────────────────── */
 
 export const signInWithGoogle = () =>
-  wrap(() => signInWithPopup(auth, googleProvider).then((c) => c.user));
+  wrap(() => {
+    ensureAuth();
+    if (!googleProvider) {
+      throw buildAuthConfigError();
+    }
+    return signInWithPopup(auth, googleProvider).then((c) => c.user);
+  });
 
 /* ── Email verification ──────────────────────────────────── */
 
 export const sendEmailVerification = (user) =>
-  wrap(() => fbSendEmailVerification(user ?? auth.currentUser));
+  wrap(() => {
+    ensureAuth();
+    return fbSendEmailVerification(user ?? auth.currentUser);
+  });
 
 /* ── Password reset ──────────────────────────────────────── */
 
 export const forgotPassword = (email) =>
-  wrap(() => fbSendPasswordResetEmail(auth, email));
+  wrap(() => {
+    ensureAuth();
+    return fbSendPasswordResetEmail(auth, email);
+  });
 
 /* ── Sign out ────────────────────────────────────────────── */
 
-export const logOut = () => wrap(() => signOut(auth));
+export const logOut = () =>
+  wrap(() => {
+    ensureAuth();
+    return signOut(auth);
+  });
 
 /* ── Auth state observer ─────────────────────────────────── */
 
 /** Subscribe to auth state changes. Returns the unsubscribe function. */
-export const onAuthChange = (callback) => fbOnAuthStateChanged(auth, callback);
+export const onAuthChange = (callback) => {
+  if (!auth) return () => {};
+  return fbOnAuthStateChanged(auth, callback);
+};
 
 /* ── ID token ────────────────────────────────────────────── */
 

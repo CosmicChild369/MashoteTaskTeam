@@ -8,6 +8,7 @@ import StepRoleFields from '../components/register/StepRoleFields';
 import StepOTP from '../components/register/StepOTP';
 import StepProfilePhoto from '../components/register/StepProfilePhoto';
 import { signUpWithEmail } from '@/lib/firebaseAuthService';
+import { isFirebaseConfigured } from '@/lib/firebase';
 import { saveUserRole } from '@/lib/userRoleService';
 
 const STEPS = ['Choose Role', 'Personal Details', 'Role Info', 'Verify Email', 'Profile & Consent'];
@@ -48,20 +49,58 @@ export default function Register() {
     }
 
     if (step === 2 && !accountCreated) {
+      const fullName = (form.full_name || '').trim();
+      const email = (form.email || '').trim().toLowerCase();
+      const password = form.password || '';
+
+      if (!isFirebaseConfigured) {
+        setSubmitError('Authentication is not configured. Please contact support.');
+        return;
+      }
+
+      if (!fullName) {
+        setSubmitError('Full name is required.');
+        return;
+      }
+
+      if (!email) {
+        setSubmitError('Email is required.');
+        return;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setSubmitError('Please enter a valid email address.');
+        return;
+      }
+
+      if (password.length < 6) {
+        setSubmitError('Password must be at least 6 characters.');
+        return;
+      }
+
       setSubmitting(true);
       setSubmitError('');
       const { data: user, error } = await signUpWithEmail({
-        email: form.email,
-        password: form.password,
-        displayName: form.full_name,
+        email,
+        password,
+        displayName: fullName,
       });
 
       if (error) {
         setSubmitting(false);
         const msg = error.code === 'auth/email-already-in-use'
           ? 'An account with this email already exists.'
+          : error.code === 'auth/invalid-email'
+          ? 'Please enter a valid email address.'
           : error.code === 'auth/weak-password'
           ? 'Password must be at least 6 characters.'
+          : error.code === 'auth/operation-not-allowed'
+          ? 'Email/password sign-up is currently disabled. Please contact support.'
+          : error.code === 'auth/network-request-failed'
+          ? 'Network error while creating your account. Check your connection and try again.'
+          : error.code === 'auth/not-configured'
+          ? 'Authentication is not configured. Please contact support.'
           : 'Registration failed. Please try again.';
         setSubmitError(msg);
         return;
